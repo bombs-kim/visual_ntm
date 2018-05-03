@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import update_monitored_state
+
 
 # TODO: mini-batch mode support
 
@@ -21,7 +23,7 @@ class Head(nn.Module):
 
     def reset_state(self):
         self.w_prev = torch.zeros((1, self.N), dtype=torch.float32)
-        self.history = []  # history is only used for debug purpose
+        self.history = [self.w_prev]  # history is only used for debug purpose
 
     # ###################### Addressing Implementation ######################
     # Following methods were named after Fig.2 of Graves et al.
@@ -78,6 +80,7 @@ class Head(nn.Module):
         w = self.sharpening(w_shifted, sharp)
 
         self.w_prev = w
+        self.history.append(w)
         return w
 
 
@@ -103,10 +106,12 @@ class Controller(nn.Module):
 
 class NTM(nn.Module):
     def __init__(self, N, M, in_seq_width, out_seq_width,
-                 ctr_hidden_size, ctr_out_size, shift_range=3):
+                 ctr_hidden_size, ctr_out_size,
+                 shift_range=3, monitor_state=False):
         super().__init__()
         self.N, self.M = N, M
         self.in_seq_width = in_seq_width
+        self.monitor_state = monitor_state
 
         # TODO: support multiple heads for read/write
         self.read_head = Head(N, M, ctr_out_size, shift_range=shift_range)
@@ -170,8 +175,15 @@ class NTM(nn.Module):
 
         # TODO: need to clone this?
         self.prev_read = read_out = self.read(controller_outputs)
+        if self.monitor_state:
+            update_monitored_state(*self.get_memory_info())
         self.write(controller_outputs)
+        if self.monitor_state:
+            update_monitored_state(*self.get_memory_info())
 
         x = torch.cat((x, read_out), 1)
         x = torch.sigmoid(self.fc(x))
         return x
+
+    def get_memory_info(self):
+        return self.memory, self.read_head.history, self.write_head.history
