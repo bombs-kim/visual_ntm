@@ -12,7 +12,7 @@ from utils import update_monitored_state
 
 def clip_grads(model, args):
     for p in model.parameters():
-        if p.grad is not None:
+        if p.grad is None:
             continue
         p.grad.data.clamp_(args.min_grad, args.max_grad)
 
@@ -24,10 +24,11 @@ def parse_arguments():
     parser.add_argument('--sequence_width', type=int, default=10)
     parser.add_argument('--num_memory_locations', type=int, default=64)
     parser.add_argument('--memory_vector_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=16)
     parser.add_argument('--training_size', type=int, default=999999)
     parser.add_argument('--controller_hidden_size', type=int, default=512)
     parser.add_argument('--controller_output_size', type=int, default=256)
-    parser.add_argument('--learning_rate', type=float, default=3e-5)
+    parser.add_argument('--learning_rate', type=float, default=1e-3)
     parser.add_argument('--min_grad', type=float, default=-10.)
     parser.add_argument('--max_grad', type=float, default=10.)
     parser.add_argument('--load', type=str, default='')
@@ -40,7 +41,7 @@ def parse_arguments():
 def main():
     args = parse_arguments()
     dataset = CopyDataset(args)
-    dataloader = DataLoader(dataset, batch_size=1,
+    dataloader = DataLoader(dataset, batch_size=args.batch_size,
                             shuffle=True, num_workers=4)
 
     model = NTM(N=args.num_memory_locations,
@@ -54,17 +55,16 @@ def main():
     criterion = torch.nn.BCELoss()
     optimizer = torch.optim.RMSprop(model.parameters(), lr=args.learning_rate)
 
-    losses = []
-
     if args.load != '':
         model.load_state_dict(torch.load(args.load))
 
     best = 999999
+    losses = []
     for idx, (x, y) in enumerate(dataloader):
         if model.monitor_state:
             update_monitored_state(memory=None, read_head=None, write_head=None)
 
-        model.reset_state()
+        model.reset_state(args.batch_size)
         optimizer.zero_grad()
         if model.monitor_state:
             update_monitored_state(*model.get_memory_info())
@@ -81,17 +81,18 @@ def main():
 
         loss = criterion(pred, y)
         loss.backward()
-        clip_grads(model, args)
+        # clip_grads(model, args)
         optimizer.step()
         losses.append(loss.item())
 
-        if idx % 200 == 0:
+        if idx % 50 == 0:
             mean_loss = np.array(losses[:20]).mean()
-            print("%8d" % idx, "Loss: %0.5f" % loss.item(),
+            print("\n%8d" % idx, "Loss: %0.5f" % loss.item(),
                   "Mean: %0.5f" % mean_loss)
             losses = []
             torch.save(model.state_dict(), args.save)
             if mean_loss < best and loss.item() < best * 1.2:
+                print("** best", idx, mean_loss)
                 best = mean_loss
                 torch.save(model.state_dict(), 'best')
 
