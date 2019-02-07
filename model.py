@@ -6,8 +6,6 @@ import torch.nn.functional as F
 from utils import update_monitored_state
 
 
-# TODO: mini-batch mode support
-
 class Head(nn.Module):
     def __init__(self, N, M, in_size, shift_range=3):
         super().__init__()
@@ -39,9 +37,9 @@ class Head(nn.Module):
         w_g = torch.cat([w_g[:, -1:], w_g, w_g[:, :1]], dim=1)
         w_list = []
         for w_each, shift_each in zip(w_g, shift):
-            #            resulting shape (Batch, channel, self.N)
+            #        shape (Batch, channel, self.N)
             w_each = w_each.reshape(1, 1, -1)
-            #            shift weight shape (out_channel, in_channel, range)
+            #            shape (out_channel, in_channel, range)
             shift_each = shift_each.reshape(1, 1, -1)
             w_shifted_each = F.conv1d(w_each, shift_each).squeeze(1)
             w_list.append(w_shifted_each)
@@ -110,17 +108,25 @@ class Controller(nn.Module):
 
 
 class LstmController(nn.Module):
-    def __init__(self, in_size, hidden_size, out_size, num_layers=2):
+    def __init__(self, in_size, out_size, num_layers=2):
         super().__init__()
-        self.hidden_size = hidden_size
+        self.in_size = in_size
+        self.out_size = out_size
         self.num_layers = num_layers
-        self.lstm = nn.LSTM(in_size, hidden_size, num_layers=num_layers)
-        self.fc = nn.Linear(hidden_size, out_size)
-        # TODO: add self.reset_parameters()
+        self.lstm = nn.LSTM(in_size, out_size, num_layers=num_layers)
+        self.reset_parameters()
 
     def reset_state(self, batch_size):
-        shape = (self.num_layers, batch_size, self.hidden_size)
+        shape = (self.num_layers, batch_size, self.out_size)
         self.hidden = (torch.zeros(shape), torch.zeros(shape))
+
+    def reset_parameters(self):
+        for p in self.lstm.parameters():
+            if p.dim() == 1:
+                nn.init.constant_(p, 0)
+            else:
+                stdev = 5 / (np.sqrt(self.in_size + self.out_size))
+                nn.init.uniform_(p, -stdev, stdev)
 
     def forward(self, x, prev_read):
         x = torch.cat((x, prev_read), dim=1)
@@ -128,10 +134,7 @@ class LstmController(nn.Module):
         # Add sequence dimension
         x = x.unsqueeze(dim=0)
         x, self.hidden = self.lstm(x, self.hidden)
-
         x = x.squeeze(dim=0)
-        x = self.fc(x)
-        x = torch.sigmoid(x)
         return x
 
 
@@ -145,7 +148,7 @@ class NTM(nn.Module):
         self.monitor_state = monitor_state
 
         self.controller = LstmController(
-            self.in_seq_width + M, ctr_hidden_size, ctr_out_size)
+            self.in_seq_width + M, ctr_out_size)
 
         # TODO: support multiple heads for read/write
         self.read_head = Head(N, M, ctr_out_size, shift_range=shift_range)
