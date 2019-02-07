@@ -2,7 +2,15 @@
 [Neural Turing Machines, arxiv:1410.5401](https://arxiv.org/abs/1410.5401)
 
 ![](demo.gif)
+(outdated picture)
 
+This is a NTM implementation in pytorch with a memory and read/write
+head visualizer. This project is intended to be instructional
+as much as possible. The code is succinct and easy to understand.
+The visualizer helps you to
+grasp how heads and memory act with respect to an input. Currently,
+the copy task has been implemted and the other tasks are planned to be 
+added.
 
 ### Requirements
 - python3
@@ -37,6 +45,8 @@ and open another terminal
 cd path/to/this/project
 python train.py --monitor_state
 ```
+
+It is a good idea to use a debugger with the visualizer like in the demo.gif.
 
 <br>
 
