@@ -33,7 +33,7 @@ usage: train.py [-h] [--sequence_length SEQUENCE_LENGTH]
 ```
 <br>
 
-### How to run visualizer
+### How to run visualizer (currently being fixed after controller redeisgn)
 
 ```
 cd path/to/this/project
