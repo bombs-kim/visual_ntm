@@ -2,3 +2,7 @@
 best*
 backup*
 __pycache__/*
+log*
+data.json
+.ipynb_checkpoints
+*.ipynb
