@@ -102,6 +102,7 @@ function draw_diff(x, y, mat, mat_prev, grid_size){
     }
 }
 
+
 function put_text(text, left, top){
     var style = {
         'position': 'absolute',
@@ -113,6 +114,7 @@ function put_text(text, left, top){
         .css(style)
         .appendTo('html');
 }
+
 
 function setup() {
     background(250);

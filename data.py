@@ -25,4 +25,4 @@ class CopyDataset(Dataset):
 
     def __getitem__(self, _):
         inp, out = self.create_seq()
-        return inp, out
+        return (inp, out)
