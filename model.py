@@ -9,6 +9,8 @@ from utils import update_monitored_state
 class Head(nn.Module):
     def __init__(self, N, M, in_size, shift_range=3):
         super().__init__()
+        # N: number of memory locations
+        # M: vector size at each location
         self.N, self.M = N, M
         self.shift_range = shift_range
         self.fc = nn.Linear(in_size, self.M + self.shift_range + 3)
@@ -37,9 +39,9 @@ class Head(nn.Module):
         w_g = torch.cat([w_g[:, -1:], w_g, w_g[:, :1]], dim=1)
         w_list = []
         for w_each, shift_each in zip(w_g, shift):
-            #        shape (Batch, channel, self.N)
+            # shape (Batch, channel, self.N)
             w_each = w_each.reshape(1, 1, -1)
-            #            shape (out_channel, in_channel, range)
+            # shape (out_channel, in_channel, range)
             shift_each = shift_each.reshape(1, 1, -1)
             w_shifted_each = F.conv1d(w_each, shift_each).squeeze(1)
             w_list.append(w_shifted_each)
@@ -75,7 +77,7 @@ class Head(nn.Module):
         stren = F.softplus(stren)
         gate = torch.sigmoid(gate)
         shift = torch.softmax(shift, dim=-1)
-        sharp = 1 + F.softplus(sharp)  # TODO: check
+        sharp = 1 + F.softplus(sharp)
 
         w_c = self.content_addressing(memory, key, stren)
         w_g = self.interpolation(w_c, self.w_prev, gate)
@@ -114,23 +116,31 @@ class LstmController(nn.Module):
         self.out_size = out_size
         self.num_layers = num_layers
         self.lstm = nn.LSTM(in_size, out_size, num_layers=num_layers)
+
+        h = torch.zeros(num_layers, out_size)
+        self.hidden_state_init = torch.nn.Parameter(h)
+        c = torch.zeros(num_layers, out_size)
+        self.cell_state_init = torch.nn.Parameter(c)
         self.reset_parameters()
 
     def reset_state(self, batch_size):
-        shape = (self.num_layers, batch_size, self.out_size)
-        self.hidden = (torch.zeros(shape), torch.zeros(shape))
+        # shape: (self.num_layers, batch_size, self.out_size)
+        hidden_state = torch.stack([self.hidden_state_init]*batch_size, dim=1)
+        # shape: (self.num_layers, batch_size, self.out_size)
+        cell_state = torch.stack([self.cell_state_init]*batch_size, dim=1)
+        self.hidden = (hidden_state, cell_state)
 
     def reset_parameters(self):
-        for p in self.lstm.parameters():
+        for name, p in self.lstm.named_parameters():
             if p.dim() == 1:
-                nn.init.constant_(p, 0)
+                nn.init.constant_(p, 0.01)
             else:
                 stdev = 5 / (np.sqrt(self.in_size + self.out_size))
                 nn.init.uniform_(p, -stdev, stdev)
+        # TODO: initialize hidden and cell states to reasonable values
 
     def forward(self, x, prev_read):
         x = torch.cat((x, prev_read), dim=1)
-
         # Add sequence dimension
         x = x.unsqueeze(dim=0)
         x, self.hidden = self.lstm(x, self.hidden)
@@ -139,10 +149,11 @@ class LstmController(nn.Module):
 
 
 class NTM(nn.Module):
-    def __init__(self, N, M, in_seq_width, out_seq_width,
-                 ctr_hidden_size, ctr_out_size,
+    def __init__(self, N, M, in_seq_width, out_seq_width, ctr_out_size,
                  shift_range=3, monitor_state=False):
         super().__init__()
+        self.init_args = [N, M, in_seq_width, out_seq_width, ctr_out_size,
+                          shift_range, monitor_state]
         self.N, self.M = N, M
         self.in_seq_width = in_seq_width
         self.monitor_state = monitor_state
@@ -154,8 +165,11 @@ class NTM(nn.Module):
         self.read_head = Head(N, M, ctr_out_size, shift_range=shift_range)
         self.write_head = Head(N, M, ctr_out_size, shift_range=shift_range)
 
-        self.erase_add_fc = nn.Linear(256, M * 2)
+        self.erase_add_fc = nn.Linear(ctr_out_size, M * 2)
         self.fc = nn.Linear(self.in_seq_width + M, out_seq_width)
+
+        self.prev_read_init = torch.nn.Parameter(torch.zeros(self.M))
+        self.memory_init = torch.nn.Parameter(torch.zeros(self.N, self.M))
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -163,22 +177,19 @@ class NTM(nn.Module):
         nn.init.xavier_uniform_(self.fc.weight, gain=1.4)
         nn.init.normal_(self.erase_add_fc.bias, std=0.5)
         nn.init.normal_(self.fc.bias, std=0.5)
+        # torch.nn.init.uniform_(self.prev_read_init, -1, 1)
+        # torch.nn.init.uniform_(self.memory_init, -1, 1)
 
     def reset_state(self, batch_size):
         self.batch_size = batch_size
 
         self.controller.reset_state(batch_size)
 
-        # TODO: Maybe make prev_read zero?
-        self.prev_read = torch.tanh(
-            torch.randn(batch_size, self.M, dtype=torch.float))
-        # TODO: add batchsize to read_head, write_head reset_state
         self.read_head.reset_state(batch_size)
         self.write_head.reset_state(batch_size)
 
-        stdev = 1 / (np.sqrt(self.N + self.M))
-        self.memory = nn.init.uniform(
-            torch.Tensor(batch_size, self.N, self.M), -stdev, stdev)
+        self.prev_read = torch.stack([self.prev_read_init]*batch_size, dim=0)
+        self.memory = torch.stack([self.memory_init]*batch_size, dim=0)
 
     def read(self, controller_outputs):
         w = self.read_head(controller_outputs, self.memory)
@@ -193,11 +204,11 @@ class NTM(nn.Module):
         e = torch.sigmoid(e)
         a = torch.tanh(a)
 
-        w = w.unsqueeze(2)  # shape (batch, self.N, 1)
-        e = e.unsqueeze(1)  # shape (batch, 1, self.M)
+        w = w.unsqueeze(2)  # shape: (batch, self.N, 1)
+        e = e.unsqueeze(1)  # shape: (batch, 1, self.M)
         a = a.unsqueeze(1)
 
-        erase = torch.bmm(w, e)  # shape (batch, self.N, self.M)
+        erase = torch.bmm(w, e)  # shape: (batch, self.N, self.M)
         add = torch.bmm(w, a)
         mem = self.memory * (1 - erase)
         mem = mem + add
