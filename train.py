@@ -21,7 +21,7 @@ def parse_arguments():
     parser.add_argument('--sequence_width', type=int, default=8)
     parser.add_argument('--num_memory_locations', type=int, default=128)
     parser.add_argument('--memory_vector_size', type=int, default=20)
-    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--training_size', type=int, default=999999)
     parser.add_argument('--controller_output_size', type=int, default=100)
 
@@ -40,6 +40,9 @@ def parse_arguments():
 
 def main():
     args = parse_arguments()
+    if args.batch_size != 1:
+        print("Warning. NTM cannot be easily trained"
+              " with batch size bigger than 1")
     if args.load == '':
         idx = 0
         best = 999999
