@@ -16,13 +16,13 @@ function update(response) {
         var diff_only = true;
     }
     // draw memory state
-    draw_grid(60, 60, memory, memory_prev, 5, diff_only);
+    draw_grid(60, 60, memory, memory_prev, 8, diff_only);
     if (diff_only){
         return;
     }
 
-    draw_grid(60, 420, read_head, null, 10, diff_only);
-    draw_grid(60, 550, write_head, null, 10, diff_only);
+    draw_grid(400, 60, read_head, null, 10, diff_only);
+    draw_grid(400, 200, write_head, null, 10, diff_only);
 }
 
 
@@ -36,68 +36,39 @@ function draw_grid(x, y, mat, mat_prev, grid_size, diff_only){
             stroke(0);
 
             // The color is chosen somewhat arbitrarily here.
-            // If you have a better idea, please make an issue about it.
             var val = mat[j][i]*100;
             val = 1 / (1 + Math.pow(Math.E, -val));
             var color = val * 200;
-            
-            // Blinking effect
+
             if (mat_prev){
-                var accelerator = 16;
-                var cur = (frameCount * accelerator) % 256;
-                if (cur < 128)
-                    var mul = cur;
-                else
-                    var mul = 256- cur;
-                var diff = Math.abs(mat[j][i] - mat_prev[j][i]) * mul;
+                var diff = Math.abs(mat[j][i] - mat_prev[j][i]);
             }    
             else
                 var diff = 0;
 
             // Ignore small diff
-            if (diff_only && diff < 10){
+            if (diff_only && diff < 0.001){
                 continue;
             }
 
-            fill(diff, color-diff, color-diff);
+            strokeWeight(1);
+            fill(0, color, color);
             rect(x + gs * i, y + gs * j, gs, gs);
-        }
-    }
-    hi = false
-}
 
-
-function draw_diff(x, y, mat, mat_prev, grid_size){
-    var gs = grid_size;
-    if (!mat)
-        return;
-
-    for (j = 0; j < mat.length; j++) {
-        for (i = 0; i < mat[j].length; i++) {
-            stroke(0);
-
-            // The color selection is arbitrary now.
-            // If you have a better idea, please make an issue.
-            var val = mat[j][i] * 100;
-            val = 1 / (1 + Math.pow(Math.E, -val));
-            var color = val * 200;
-
-            if (mat_prev) {
-                var cur = (frameCount * 4) % 200;
-                if (cur < 100)
+            // Blinking effect
+            if (diff > 0.001) {
+                var accelerator = 16;
+                var cur = (frameCount * accelerator) % 256;
+                if (cur <= 16 * 8)
                     var mul = cur;
                 else
-                    var mul = 200 - cur;
-                mul += 55;
-                var diff = Math.abs(mat[j][i] - mat_prev[j][i]) * mul;
-            } else
-                var diff = 0;
-            
-            if (diff < 10)
-                continue;
+                    var mul = (16 * 16) - cur;
 
-            fill(diff, color - diff, color - diff);
-            rect(x + gs * i, y + gs * j, gs, gs);
+                strokeWeight(2);
+                diff = diff * mul;
+                stroke(diff, 0, 0);
+                rect(x + gs * i, y + gs * j, gs, gs);
+            }
         }
     }
 }
@@ -121,8 +92,8 @@ function setup() {
     createCanvas(800, 1000);
     frameRate(8);
     put_text('memory', 70, 45);
-    put_text('read_head', 70, 405);
-    put_text('write_head', 70, 535);
+    put_text('read_head', 410, 45);
+    put_text('write_head', 410, 185);
 }
 
 

@@ -5,8 +5,9 @@ import time
 import torch
 
 
-def update_monitored_state(memory=None, read_head=None,
-                           write_head=None, filename='data.json'):
+def update_monitored_state(memory=None,
+                           read_head=None, write_head=None,
+                           filename='data.json'):
     """
     Only the state with respect to the first item of a batch is monitored
     """

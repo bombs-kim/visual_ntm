@@ -17,7 +17,7 @@ added.
 <br>
 <br>
 
-### Usage
+### How to train
 ```
 train.py [-h] [--sequence_length SEQUENCE_LENGTH]
                 [--sequence_width SEQUENCE_WIDTH]
@@ -31,6 +31,11 @@ train.py [-h] [--sequence_length SEQUENCE_LENGTH]
                 [--save_best SAVE_BEST]
 ```
 <br>
+
+### How to test
+```
+python test.py --load pretrained
+```
 
 ### How to run visualizer
 
@@ -49,16 +54,13 @@ It is a good idea to use a debugger with the visualizer like in the demo.gif.
 
 <br>
 
-### Sample training result
-![](loss.png)
 ##### settings
-- sequence_length: 3
-- sequence_width: 10
-- num_memory_locations: 64
-- memory_vector_size: 32
+- sequence_length: 1~10
+- sequence_width: 8
+- num_memory_locations: 128
+- memory_vector_size: 20
 - batch_size: 1
-- controller_output_size: 256
-- custom lr scheduling
+- controller_output_size: 100
 
-##### Final mean loss is 0.000129
 ##### Weight saved as `pretrained` file
+##### whose mean loss is 0.00170
